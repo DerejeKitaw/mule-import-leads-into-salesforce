@@ -1,0 +1,3 @@
+file:
+  workingDirectory: 'C:\Users\dkitaw\AnypointStudio\studio-workspace\mule-import-leads-into-salesforce\src\main\resources\input'
+  fileName: 'leads.csv'

@@ -7,14 +7,15 @@ http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/fil
 http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
 http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
 	<file:config name="File_Config" doc:name="File Config" doc:id="011bc8ab-8b04-4842-94d3-fb8af1bf24db" >
-		<file:connection workingDir="C:\Users\dkitaw\AnypointStudio\studio-workspace\mule-import-leads-into-salesforce\src\main\resources\input" />
+		<file:connection workingDir="${file.workingDirectory}" />
 	</file:config>
 	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="77ed03f2-4ab0-4434-b812-8b3c6dc02a68" >
 		<http:listener-connection host="0.0.0.0" port="8081" />
 	</http:listener-config>
+	<configuration-properties doc:name="Configuration properties" doc:id="32869fba-71b3-4ddd-8251-ed62032f770b" file="dev.yaml" />
 	<flow name="mule-import-leads-into-salesforceFlow" doc:id="dd65aeb7-5cfc-41f1-866a-d0c78aca8610" >
 		<http:listener doc:name="Listener" doc:id="9751ee0c-6a4f-4c38-be57-ec074469c5d9" config-ref="HTTP_Listener_config" path="/transfer"/>
-		<file:read doc:name="Read the CSV file" doc:id="114893a6-3297-4b79-b0b2-952a749e2533" config-ref="File_Config" path="leads.csv" outputMimeType="text/csv"/>
+		<file:read doc:name="Read the CSV file" doc:id="114893a6-3297-4b79-b0b2-952a749e2533" config-ref="File_Config" path="${file.fileName}" outputMimeType="text/csv"/>
 		<ee:transform doc:name="Transform CSV to Maps" doc:id="826408fe-3921-4503-8567-68d5cb3a10f3" >
 			<ee:message >
 				<ee:set-payload ><![CDATA[%dw 2.0
