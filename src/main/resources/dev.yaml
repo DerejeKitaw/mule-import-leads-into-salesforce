@@ -1,3 +1,12 @@
 file:
   workingDirectory: 'C:\Users\dkitaw\AnypointStudio\studio-workspace\mule-import-leads-into-salesforce\src\main\resources\input'
   fileName: 'leads.csv'
+  
+sfdc:
+  user: dereje@dkitaw.com
+  password: '![lba1ZXrFoUg7exXMLkcnMQ==]'
+  securityToken: '![bm1PM8fq6hA6VENPp2Rpd6Lb/ufVmUzqGQIiazML6lU=]'
+  
+scheduler:
+  frequency: '10000'
+  startDelay: '0'

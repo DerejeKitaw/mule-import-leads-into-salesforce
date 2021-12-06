@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
-	xmlns:file="http://www.mulesoft.org/schema/mule/file"
-	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+<mule xmlns:secure-properties="http://www.mulesoft.org/schema/mule/secure-properties" xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+	xmlns:batch="http://www.mulesoft.org/schema/mule/batch"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
 http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
 http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
-http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/batch http://www.mulesoft.org/schema/mule/batch/current/mule-batch.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+http://www.mulesoft.org/schema/mule/secure-properties http://www.mulesoft.org/schema/mule/secure-properties/current/mule-secure-properties.xsd">
 	<file:config name="File_Config" doc:name="File Config" doc:id="011bc8ab-8b04-4842-94d3-fb8af1bf24db" >
 		<file:connection workingDir="${file.workingDirectory}" />
 	</file:config>
@@ -13,8 +16,24 @@ http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/htt
 		<http:listener-connection host="0.0.0.0" port="8081" />
 	</http:listener-config>
 	<configuration-properties doc:name="Configuration properties" doc:id="32869fba-71b3-4ddd-8251-ed62032f770b" file="dev.yaml" />
+	<salesforce:sfdc-config
+		name="Salesforce_Sfdc_config" doc:name="Salesforce Sfdc config"
+		doc:id="cc69fc5d-aedd-4c63-a876-6fa1b0534182">
+		<salesforce:basic-connection
+			username="${sfdc.user}" password="${secure::sfdc.password}"
+			securityToken="${secure::sfdc.securityToken}">
+			
+		</salesforce:basic-connection>
+	</salesforce:sfdc-config>
+	<secure-properties:config name="Secure_Properties_Config" doc:name="Secure Properties Config" doc:id="1482c118-1c86-401d-b569-d72055072467" file="${env}.yaml" key="${enc.key}" >
+		<secure-properties:encrypt algorithm="Blowfish" />
+	</secure-properties:config>
 	<flow name="mule-import-leads-into-salesforceFlow" doc:id="dd65aeb7-5cfc-41f1-866a-d0c78aca8610" >
-		<http:listener doc:name="Listener" doc:id="9751ee0c-6a4f-4c38-be57-ec074469c5d9" config-ref="HTTP_Listener_config" path="/transfer"/>
+		<scheduler doc:name="Scheduler" doc:id="1d7940c8-9961-4c00-810d-7001225aaabf" >
+			<scheduling-strategy >
+				<fixed-frequency frequency="${scheduler.frequency}" startDelay="${scheduler.startDelay}"/>
+			</scheduling-strategy>
+		</scheduler>
 		<file:read doc:name="Read the CSV file" doc:id="114893a6-3297-4b79-b0b2-952a749e2533" config-ref="File_Config" path="${file.fileName}" outputMimeType="text/csv"/>
 		<ee:transform doc:name="Transform CSV to Maps" doc:id="826408fe-3921-4503-8567-68d5cb3a10f3" >
 			<ee:message >
@@ -29,13 +48,31 @@ payload map {
 }]]></ee:set-payload>
 			</ee:message>
 		</ee:transform>
-		<ee:transform doc:name="Transform Message" doc:id="4ee41dd6-b7f3-48a1-97bc-468efaeb777f" >
-			<ee:message >
-				<ee:set-payload ><![CDATA[%dw 2.0
-output application/json
+		<batch:job jobName="CreateLeadsBatch" doc:id="4b9198a4-5b89-4686-a94e-0cd6833a8597" maxFailedRecords="1000">
+			<batch:process-records >
+				<batch:step name="LeadExistsStep" doc:id="33d79f2e-e7a9-4c02-964d-e40fa215b310" >
+					<salesforce:query doc:name="Query" doc:id="20aa2db6-6b84-4558-9503-c2d659f73425" config-ref="Salesforce_Sfdc_config" target="leadNotFound" targetValue="#[isEmpty(payload)]">
+						<salesforce:salesforce-query ><![CDATA[SELECT Id FROM Lead WHERE Email = ':email']]></salesforce:salesforce-query>
+						<salesforce:parameters ><![CDATA[#[output applicaton/java
 ---
-payload]]></ee:set-payload>
-			</ee:message>
-		</ee:transform>
+{
+	"email" : payload.Email
+}]]]></salesforce:parameters>
+					</salesforce:query>
+				</batch:step>
+				<batch:step name="LeadInsertStep" doc:id="45236519-848d-4da9-adc1-d627971e4f11" acceptExpression="vars.leadNotFound">
+					<batch:aggregator doc:name="Batch Aggregator" doc:id="75d96131-d7ae-4a9c-96e7-992087fd145f" size="200">
+						<logger level="INFO" doc:name="Logger" doc:id="b10e1a17-00b1-40f2-a868-ef704820ef75" message="#[payload]"/>
+						<salesforce:create doc:name="Insert Lead" doc:id="a6186818-1894-49f5-8bec-f57b104d6e17" config-ref="Salesforce_Sfdc_config" type="Lead"/>
+					</batch:aggregator>
+				</batch:step>
+				<batch:step name="LogFailuresStep" doc:id="ad8951e3-8b7e-4333-bb13-506f3038dfa2" acceptPolicy="ONLY_FAILURES">
+					<logger level="INFO" doc:name="Log Failure" doc:id="afa597c3-2e61-4f52-877e-35ea4567b3dc" message="#['Failure: ' ++  write(payload, 'application/json', {'indent': 'false'})]"/>
+				</batch:step>
+			</batch:process-records>
+			<batch:on-complete >
+				<logger level="INFO" doc:name="Log Results" doc:id="468b9600-de18-4aa7-85df-881dd0c793b8" message="#[payload.loadedRecords ++ ' Loaded Records ' ++ payload.failedRecords ++' Failed Records']"/>
+			</batch:on-complete>
+		</batch:job>
 	</flow>
 </mule>
